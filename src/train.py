@@ -24,10 +24,13 @@ def main(args):
 
     # Batcher
     gen_batcher = GenBatcher(args.text_truncate, args.gpt2_truncate, args.gpt2_config, args.cuda)
+    print("Datasets & Dataloaders instantiated...")
 
     # model
-    gen_model = GPT2Summ(tokenizer=args.tokenizer, gpt2_config=args.gpt2_config, segment=args.segment)
+    gen_model = GPT2Summ(tokenizer=gen_batcher.tokenizer, gpt2_config=args.gpt2_config, segment=args.segment)
     gen_model.to(args.cuda)
+    print("Generater model instantiated...")
+    
     # loss criterion
     ce = lambda logit, target: F.cross_entropy(logit, target, reduce=False)
     gen_criterion = lambda logits, targets: sequence_loss(logits, targets, ce, pad_idx=-1)
@@ -36,7 +39,7 @@ def main(args):
     optimizer = torch.optim.Adam(gen_model.parameters(), lr = args.lr)
     
     for epoch in range(args.epochs):
-        
+        print(f"Beginning epoch: {epoch}.....")
         #train step
         n_token, train_loss = 0, 0.0 # ppl
         for knowledges, histories, users, responses, knowledge_lens in train_loader:
@@ -44,8 +47,12 @@ def main(args):
             gen_args = gen_batcher(histories, users, responses, args.segment, True)
             
             optimizer.zero_grad()
-            loss = gen_criterion(gen_model(gen_args[0].to(args.cuda), token_type_ids=gen_args[1].to(args.cuda))[0], gen_args[2].to(args.cuda))
-            loss.backward()
+
+            outputs = gen_model(gen_args[0].to(args.cuda), token_type_ids=gen_args[1].to(args.cuda) if gen_args[1] else None)
+            loss = gen_criterion(outputs[0], gen_args[2].to(args.cuda))
+            # breakpoint()
+
+            loss.mean().backward()
             optimizer.step()
             
             n_token += loss.size(0)
@@ -60,8 +67,8 @@ def main(args):
             for knowledges, histories, users, responses, knowledge_lens in valid_loader:
                 histories = [his.split('\n\n') for his in histories]
                 gen_args = gen_batcher(histories, users, responses, args.segment, True)
-                
-                loss = gen_criterion(gen_model(gen_args[0].to(args.cuda), token_type_ids=gen_args[1].to(args.cuda))[0], gen_args[2].to(args.cuda))
+                outputs = gen_model(gen_args[0].to(args.cuda), token_type_ids=gen_args[1].to(args.cuda) if gen_args[1] else None)
+                loss = gen_criterion(outputs[0], gen_args[2].to(args.cuda))
                 
                 n_token += loss.size(0)
                 valid_loss += loss.sum().item()
@@ -80,11 +87,13 @@ if __name__ == "__main__":
     )
 
     # files
-    parser.add_argument('--train_file', type=str, default='wizard_of_wikipedia/data/train.jsonl')
-    parser.add_argument('--valid_file', type=str, default='wizard_of_wikipedia/data/valid.jsonl')
+    parser.add_argument('--train_file', type=str, default='data/train.jsonl')
+    parser.add_argument('--valid_file', type=str, default='data/valid.jsonl')
 
     # training scheme
     parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--lr', type=float, default=0.00005)
+    parser.add_argument('--epochs', type=int, default=10)
 
     # save
     parser.add_argument('--exp_name', type=str, default='test')
@@ -93,8 +102,8 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=42)
 
     # model
-    parser.add_argument('--bert_config', type=str, default='pretrain-models/bert_base_uncased')
-    parser.add_argument('--gpt2_config', type=str, default='pretrain-models/gpt2')
+    parser.add_argument('--bert_config', type=str, default='pretrained-models/bert_base_uncased')
+    parser.add_argument('--gpt2_config', type=str, default='pretrained-models/gpt2')
 
     parser.add_argument('--gpt2_truncate', type=int, default=256) # for gpt2
     parser.add_argument('--knowledge_truncate', type=int, default=64) # for gpt2
@@ -127,6 +136,6 @@ if __name__ == "__main__":
 
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_list
     args.cuda = torch.cuda.is_available() and not args.no_cuda
-
+    args.cuda = torch.device('cuda' if args.cuda else 'cpu')
     main(args)  
         
