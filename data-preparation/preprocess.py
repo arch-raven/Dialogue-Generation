@@ -1,7 +1,7 @@
 import argparse
 import os
 import json
-from .wizard_generator import data_generator
+from wizard_generator import data_generator
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -14,8 +14,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Dev Test Run
-    args.in_file = "../wizard_of_wikipedia/train.json" 
-    args.out_file = "data/train.jsonl"
+    #args.in_file = "../wizard_of_wikipedia/train.json" 
+    #args.out_file = "data/train.jsonl"
     # args.use_samples = 1
     
     
