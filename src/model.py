@@ -48,10 +48,29 @@ class GPT2Summ(GPT2PreTrainedModel):
         return inputs
 
     def forward(self, input_ids, past=None, attention_mask=None, token_type_ids=None):
-        transformer_outputs = self.transformer(input_ids, past=past, token_type_ids=token_type_ids)
+        transformer_outputs = self.transformer(input_ids, token_type_ids=token_type_ids)
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
         return (lm_logits,) + transformer_outputs[1:]
+    
+    def batch_decode(self, input_ids, max_len, min_len, early_stopping, beam_size,
+                     repetition_penalty, eos_id, length_penalty, no_repeat_ngram_size):
+        # new-version
+        output_sequences = self.generate(
+            input_ids=input_ids,
+            max_length=input_ids.size(1) + max_len,
+            min_length=input_ids.size(1) + min_len,
+            do_sample=False,
+            early_stopping=early_stopping,
+            num_beams=beam_size,
+            repetition_penalty=repetition_penalty,
+            pad_token_id=0,
+            # pad_token_id=None,
+            eos_token_id=eos_id,
+            length_penalty=length_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+        )
+        return output_sequences
 
 
 def sequence_loss(logits, targets, xent_fn=None, pad_idx=0):

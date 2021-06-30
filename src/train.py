@@ -57,17 +57,27 @@ def main(args):
         # valid step
         with torch.no_grad():
             n_token, valid_loss = 0, 0.0 # ppl
-            for knowledges, histories, users, responses, knowledge_lens in valid_loader:
+            for i, knowledges, histories, users, responses, knowledge_lens in enumerate(valid_loader):
                 histories = [his.split('\n\n') for his in histories]
-                gen_args = gen_batcher(histories, users, responses, args.segment, True)
+                gen_args = gen_batcher(histories, users, responses, args.segment, False) 
                 
                 loss = gen_criterion(gen_model(gen_args[0].to(args.cuda), token_type_ids=gen_args[1].to(args.cuda))[0], gen_args[2].to(args.cuda))
-                
+                if i==0:
+                    dec_in = gen_batcher(histories, users, segment=args.segment, training=False)
+                    dec_out = gen_model.batch_decode(dec_in, args.max_length, args.min_length, args.early_stopping,
+                                                        args.beam_size, args.repetition_penalty, gen_batcher.eos_id,
+                                                        args.length_penalty, args.no_repeat_ngram_size)
+                    dec_out = dec_out[0].tolist()[dec_in.size(1):]
+                    _hyp = gen_batcher.tokenizer.decode(dec_out, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+                    _ref = responses
+                    print(_hyp, _ref)
+                                   
                 n_token += loss.size(0)
                 valid_loss += loss.sum().item()
 
             ValidMeanLoss = valid_loss / n_token
 
+        
         time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         print("**********************************")
         print("EPOCH: {} results.......... {}".format(epoch, time_str))
