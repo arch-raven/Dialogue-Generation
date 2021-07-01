@@ -27,7 +27,8 @@ if __name__ == "__main__":
     )
     parser.add_argument('gpus', type=str)
     parser.add_argument('--cpu', action='store_true')
-
+    
+    parser.add_argument("--progress_bar_refresh_rate", default=100, type=int)
     # files
     parser.add_argument('--train_file', type=str, default='data/train.jsonl')
     parser.add_argument('--valid_file', type=str, default='data/valid.jsonl')
@@ -58,13 +59,6 @@ if __name__ == "__main__":
     parser.add_argument('--no_repeat_ngram_size', type=int, default=0)
     parser.add_argument('--emb_dim', type=int, default=768)
     parser.add_argument('--lstm_hidden', type=int, default=256)
-    parser.add_argument('--lstm_layer', type=int, default=1)
-
-    # gpu
-    parser.add_argument('--gpu_list', type=str, default='2')
-    parser.add_argument('--gpu_ratio', type=float, default=0.85)
-    parser.add_argument('--no_cuda', action="store_true")
-
     args = parser.parse_args()
     
     pl.seed_everything(args.seed)

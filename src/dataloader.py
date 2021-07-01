@@ -125,15 +125,15 @@ class DataModule(pl.LightningDataModule):
         train_dataset = KGDataset(self.hparams.train_file, max_knowledge=999)
         loader = DataLoader(
             train_dataset, batch_size=self.hparams.batch_size,
-            shuffle=True, num_workers=0, collate_fn=collate_fn
+            shuffle=True, num_workers=8, collate_fn=collate_fn
         )
         return loader
     
-    def train_dataloader(self):
+    def val_dataloader(self):
         train_dataset = KGDataset(self.hparams.valid_file, max_knowledge=999)
         loader = DataLoader(
             train_dataset, batch_size=1,
-            shuffle=False, num_workers=0, collate_fn=collate_fn
+            shuffle=False, num_workers=8, collate_fn=collate_fn
         )
         return loader
     

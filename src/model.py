@@ -127,7 +127,7 @@ class GeneratorModule(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         knowledges, histories, users, responses, knowledge_lens = batch
         histories = [his.split('\n\n') for his in histories]
-        input_ids, token_type_ids, targets = self.gen_batcher(histories, users, responses, self.hparams.segment, training=False)
+        input_ids, token_type_ids, targets = self.gen_batcher(histories, users, responses, self.hparams.segment, training=True)
         
         outputs = self.gen_model(input_ids.to(self.device), token_type_ids=token_type_ids.to(self.device) if token_type_ids else None)
         loss = self.gen_criterion(outputs[0], targets.to(self.device))
