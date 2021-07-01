@@ -1,14 +1,12 @@
 import os
-import torch
 import json
 import re
-
-from torch.utils.data import DataLoader, Dataset
-
-from itertools import cycle
-
 import numpy as np
+
+import torch
+from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizer, GPT2Tokenizer
+import pytorch_lightning as pl
 
 class KGDataset(Dataset):
     def __init__(self, data_path, max_knowledge=32):
@@ -52,16 +50,8 @@ def collate_fn(batch):
     return knowledges, histories, users, responses, knowledge_lens
 
 
-def get_batch_loader(dataset, collate_fn=collate_fn, batch_size=2, num_workers=0, is_test=True):
-    loader = DataLoader(
-        dataset, batch_size=batch_size,
-        shuffle=(not is_test), num_workers=num_workers, collate_fn=collate_fn
-    )
-    return loader
-
-
 class GenBatcher:
-    def __init__(self, text_truncate, block_size, gpt2_config, cuda=True):
+    def __init__(self, text_truncate, block_size, gpt2_config):
         self.text_truncate = text_truncate
         self.block_size = block_size
 
@@ -71,7 +61,6 @@ class GenBatcher:
         self.tokenizer.add_special_tokens(SPECIAL_TOKENS_DICT)
 
         self.eos_id = self.tokenizer.eos_token_id
-        self.device = torch.device('cuda' if cuda else 'cpu')
         # todo
         self.user_id = [self.tokenizer.convert_tokens_to_ids('<user1>'), self.tokenizer.convert_tokens_to_ids('<user2>')]
 
@@ -108,9 +97,9 @@ class GenBatcher:
                 input_ids.append(ids)
                 token_type_ids.append(type_ids)
                 targets.append(tgt)
-            input_ids = torch.tensor(input_ids, device=self.device, dtype=torch.long)
-            token_type_ids = torch.tensor(token_type_ids, device=self.device, dtype=torch.long)
-            targets = torch.tensor(targets, device=self.device, dtype=torch.long)
+            input_ids = torch.tensor(input_ids, dtype=torch.long)
+            token_type_ids = torch.tensor(token_type_ids, dtype=torch.long)
+            targets = torch.tensor(targets, dtype=torch.long)
             if segment:
                 return input_ids, token_type_ids, targets
             else:
@@ -122,5 +111,33 @@ class GenBatcher:
                 history_input += [self.user_id[u]] + self.tokenize(h)[:self.text_truncate]
 
             input_ids = history_input + [self.user_id[1]]
-            input_ids = torch.tensor(input_ids, device=self.device, dtype=torch.long).unsqueeze(0)
+            input_ids = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)
             return input_ids
+        
+
+class DataModule(pl.LightningDataModule):
+    def __init__(self, args):
+        super().__init__()
+        self.hparams = args
+        # self.gen_batcher = GenBatcher(args.text_truncate, args.gpt2_truncate, args.gpt2_config)
+        
+    def train_dataloader(self):
+        train_dataset = KGDataset(self.hparams.train_file, max_knowledge=999)
+        loader = DataLoader(
+            train_dataset, batch_size=self.hparams.batch_size,
+            shuffle=True, num_workers=0, collate_fn=collate_fn
+        )
+        return loader
+    
+    def train_dataloader(self):
+        train_dataset = KGDataset(self.hparams.valid_file, max_knowledge=999)
+        loader = DataLoader(
+            train_dataset, batch_size=1,
+            shuffle=False, num_workers=0, collate_fn=collate_fn
+        )
+        return loader
+    
+    def transfer_batch_to_device(self, batch, device):
+        return batch
+    
+    

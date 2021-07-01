@@ -1,11 +1,14 @@
 import argparse
 import numpy as np
 import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 from transformers import GPT2PreTrainedModel, GPT2Model, GPT2Config
+import pytorch_lightning as pl
 
+from dataloader import GenBatcher
 
 class GPT2Summ(GPT2PreTrainedModel):
     '''succeed from GPT2PreTraninedModel which has implemented the 'generate' func'''
@@ -92,3 +95,53 @@ def sequence_loss(logits, targets, xent_fn=None, pad_idx=0):
             and not math.isinf(loss.mean().item()))
 
     return loss
+
+
+class GeneratorModule(pl.LightningModule):
+    def __init__(self, args, **kwargs):
+        """tokeknizer: gen_batcher.tokenizer"""
+        super().__init__()
+        self.save_hyperparameters(args)
+
+        ce = lambda logit, target: F.cross_entropy(logit, target, reduce=False)
+        self.gen_criterion = lambda logits, targets: sequence_loss(logits, targets, ce, pad_idx=-1)
+        self.gen_batcher = GenBatcher(args.text_truncate, args.gpt2_truncate, args.gpt2_config)
+        self.gen_model = GPT2Summ(tokenizer=self.gen_batcher.tokenizer, gpt2_config=args.gpt2_config, segment=args.segment)
+        self.n_token_train, self.train_loss, self.n_token_valid, self.valid_loss = 0, 0.0, 0, 0.0
+        
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.gen_model.parameters(), lr = self.hparams.lr)
+    
+    def training_step(self, batch, batch_idx):
+        knowledges, histories, users, responses, knowledge_lens = batch
+        histories = [his.split('\n\n') for his in histories]
+        input_ids, token_type_ids, targets = self.gen_batcher(histories, users, responses, self.hparams.segment, training=True)
+        
+        outputs = self.gen_model(input_ids.to(self.device), token_type_ids=token_type_ids.to(self.device) if token_type_ids else None)
+        loss = self.gen_criterion(outputs[0], targets.to(self.device))
+        self.log('train_loss', loss.mean())
+        self.n_token_train += loss.size(0)
+        self.train_loss += loss.sum().item()
+        return loss.mean()
+    
+    def validation_step(self, batch, batch_idx):
+        knowledges, histories, users, responses, knowledge_lens = batch
+        histories = [his.split('\n\n') for his in histories]
+        input_ids, token_type_ids, targets = self.gen_batcher(histories, users, responses, self.hparams.segment, training=False)
+        
+        outputs = self.gen_model(input_ids.to(self.device), token_type_ids=token_type_ids.to(self.device) if token_type_ids else None)
+        loss = self.gen_criterion(outputs[0], targets.to(self.device))
+        self.log('valid_loss', loss.mean())
+        self.n_token_valid += loss.size(0)
+        self.valid_loss += loss.sum().item()
+        return loss.mean()
+    
+    def training_epoch_end(self, outputs):
+        trainMeanLoss = self.train_loss / self.n_token_train
+        self.log('train_ppl', math.exp(trainMeanLoss))
+        self.n_token_train, self.train_loss = 0, 0.
+    
+    def validation_epoch_end(self, outputs):
+        validMeanLoss = self.valid_loss / self.n_token_valid
+        self.log('valid_ppl', math.exp(validMeanLoss))
+        self.n_token_valid, self.valid_loss = 0, 0.
