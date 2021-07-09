@@ -4,11 +4,13 @@ import os
 import random
 import numpy as np
 from datetime import datetime
+from pytorch_lightning.callbacks.base import Callback
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from model import GeneratorModule
 from dataloader import DataModule
@@ -17,7 +19,16 @@ from dataloader import DataModule
 def main(args):
     dm = DataModule(args)
     pl_module = GeneratorModule(args)
-    trainer = pl.Trainer.from_argparse_args(args)
+    ckpt_callback = ModelCheckpoint(
+        dirpath='checkpoints/',
+        monitor='valid_ppl',
+        save_top_k=2,
+        mode='min', 
+    )
+    trainer = pl.Trainer.from_argparse_args(
+        args,
+        callbacks=[ckpt_callback],
+    )
     trainer.fit(pl_module, dm)
      
 
@@ -37,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--lr', type=float, default=0.00005)
     parser.add_argument('--max_epochs', type=int, default=10)
-
+    parser.add_argument("--check_val_every_n_epoch", type=int, default=10)
     # save
     parser.add_argument('--seed', type=int, default=42)
 
