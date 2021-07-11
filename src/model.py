@@ -122,6 +122,9 @@ class GeneratorModule(pl.LightningModule):
         self.log('train_loss', loss.mean())
         self.n_token_train += loss.size(0)
         self.train_loss += loss.sum().item()
+        if batch_idx==0:
+                decoded = self.decode_step(outputs)
+                print(f"Decoded train output at Epoch: {self.current_epoch} | Step: {self.current_step} --> {decoded}")
         return loss.mean()
     
     def validation_step(self, batch, batch_idx):
@@ -130,6 +133,9 @@ class GeneratorModule(pl.LightningModule):
         input_ids, token_type_ids, targets = self.gen_batcher(histories, users, responses, self.hparams.segment, training=True)
         
         outputs = self.gen_model(input_ids.to(self.device), token_type_ids=token_type_ids.to(self.device) if token_type_ids else None)
+        if batch_idx<2:
+            decoded = self.decode_step(outputs)
+            print(f"Decoded output at Epoch: {self.current_epoch} | Step: {self.current_step} --> {decoded}")
         loss = self.gen_criterion(outputs[0], targets.to(self.device))
         self.log('valid_loss', loss.mean())
         self.n_token_valid += loss.size(0)
@@ -145,3 +151,11 @@ class GeneratorModule(pl.LightningModule):
         validMeanLoss = self.valid_loss / self.n_token_valid
         self.log('valid_ppl', math.exp(validMeanLoss))
         self.n_token_valid, self.valid_loss = 0, 0.
+    
+    def decode_step(self, dec_in):
+        dec_out = self.gen_model.batch_decode(
+            dec_in, 30, 15, False, 1, 1.0, self.gen_batcher.eos_id, 1.0, 0
+        )
+        dec_out = dec_out[0].tolist()[dec_in.size(1):]
+        _hyp = self.gen_batcher.tokenizer.decode(dec_out, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        return _hyp
