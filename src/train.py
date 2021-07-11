@@ -40,6 +40,7 @@ if __name__ == "__main__":
     parser.add_argument('--cpu', action='store_true')
     
     parser.add_argument("--progress_bar_refresh_rate", default=100, type=int)
+    parser.add_argument("--fast_dev_run", action="store_true")
     # files
     parser.add_argument('--train_file', type=str, default='data/train.jsonl')
     parser.add_argument('--valid_file', type=str, default='data/valid.jsonl')
