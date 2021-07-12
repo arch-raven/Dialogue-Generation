@@ -50,7 +50,7 @@ class GPT2Summ(GPT2PreTrainedModel):
         inputs.update(kwargs)
         return inputs
 
-    def forward(self, input_ids, attention_mask=None, token_type_ids=None):
+    def forward(self, input_ids, attention_mask=None, token_type_ids=None, past=None):
         transformer_outputs = self.transformer(input_ids, token_type_ids=token_type_ids)
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
