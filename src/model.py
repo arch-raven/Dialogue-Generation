@@ -132,7 +132,7 @@ class GeneratorModule(pl.LightningModule):
         outputs = self.gen_model(input_ids.to(self.device), token_type_ids=token_type_ids.to(self.device) if token_type_ids else None)
         if batch_idx<2:
             input_ids = self.gen_batcher(histories, users, responses, self.hparams.segment, training=False)
-            decoded = self.decode_step(input_ids)
+            decoded = self.decode_step(input_ids.to(self.device))
             print(f"Decoded output at Epoch: {self.current_epoch} | Step: {self.global_step} --> {decoded}")
         loss = self.gen_criterion(outputs[0], targets.to(self.device))
         self.log('valid_loss', loss.mean())

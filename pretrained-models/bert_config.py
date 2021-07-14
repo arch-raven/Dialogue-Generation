@@ -7,7 +7,7 @@ if __name__ == '__main__':
         description='Pre-training for Knowledge-Grounded Conversation'
     )
 
-    parser.add_argument('--out_file', type=str, default='')
+    parser.add_argument('--out_file', type=str, default='bert_base_uncased/')
     args = parser.parse_args()
 
     if not os.path.exists(args.out_file):
