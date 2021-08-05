@@ -9,29 +9,68 @@ from pytorch_lightning.callbacks.base import Callback
 import torch
 from torch import nn
 from torch.nn import functional as F
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
 
-from model import GeneratorModule
-from dataloader import DataModule
+from model import GPT2Summ, sequence_loss
+from dataloader import get_train_dataloader, get_val_dataloader, GenBatcher
+
 
 
 def main(args):
-    dm = DataModule(args)
-    pl_module = GeneratorModule(args)
-    ckpt_callback = ModelCheckpoint(
-        dirpath='checkpoints/',
-        monitor='valid_ppl',
-        save_top_k=2,
-        mode='min', 
-    )
-    trainer = pl.Trainer.from_argparse_args(
-        args,
-        callbacks=[ckpt_callback],
-    )
-    trainer.fit(pl_module, dm)
-     
+    ce = lambda logit, target: F.cross_entropy(logit, target, reduce=False)
+    gen_criterion = lambda logits, targets: sequence_loss(logits, targets, ce, pad_idx=-1)
+    gen_batcher = GenBatcher(args.text_truncate, args.gpt2_truncate, args.gpt2_config)
+    gen_model = GPT2Summ(tokenizer=gen_batcher.tokenizer, gpt2_config=args.gpt2_config, segment=args.segment)
+    
+    optim = torch.optim.Adam(gen_model.parameters(), lr = args.lr)
+    
+    train_dl = get_train_dataloader()
+    val_dl = get_val_dataloader()
+    
+    global_step = 0
+    for epoch in range(args.max_epochs):
+        n_token_train, train_loss, n_token_valid, valid_loss = 0, 0.0, 0, 0.0
+        gen_model.train()
+        for batch in train_dl:
+            optim.zero_grad()
+            
+            knowledges, histories, users, responses, knowledge_lens = batch
+            histories = [his.split('\n\n') for his in histories]
+            input_ids, token_type_ids, targets = gen_batcher(histories, users, responses, args.segment, training=True)
+            
+            outputs = gen_model(input_ids.to(args.device), token_type_ids=token_type_ids.to(args.device) if token_type_ids else None)
+            loss = gen_criterion(outputs[0], targets.to(args.device))
+            loss.mean().backward()
+            optim.step()
 
+            n_token_train += loss.size(0)
+            train_loss += loss.sum().item()
+            global_step += 1
+        
+        TrainMeanLoss = train_loss / n_token_train
+        
+        if (epoch % args.check_val_every_n_epoch) ==0:
+            gen_model.eval()
+            for batch in val_dl:
+                with torch.no_grad():
+                    knowledges, histories, users, responses, knowledge_lens = batch
+                    histories = [his.split('\n\n') for his in histories]
+                    input_ids, token_type_ids, targets = gen_batcher(histories, users, responses, args.segment, training=True)
+                    
+                    outputs = gen_model(input_ids.to(args.device), token_type_ids=token_type_ids.to(args.device) if token_type_ids else None)
+                    loss = gen_criterion(outputs[0], targets.to(args.device))
+
+                    n_token_valid += loss.size(0)
+                    valid_loss += loss.sum().item()
+                    return loss.mean()
+            ValidMeanLoss = valid_loss / n_token_valid
+        
+        time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print("**********************************")
+        print("EPOCH: {} results.......... {}".format(epoch, time_str))
+        print("Step: %d \t| train ppl: %.3f \t|valid ppl: %.3f" % (global_step, math.exp(TrainMeanLoss), math.exp(ValidMeanLoss)))
+        print("**********************************")
+    
+    
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Important args gpu_list train/valid_file '
@@ -73,6 +112,5 @@ if __name__ == "__main__":
     parser.add_argument('--lstm_hidden', type=int, default=256)
     args = parser.parse_args()
     
-    pl.seed_everything(args.seed)
     main(args)  
         

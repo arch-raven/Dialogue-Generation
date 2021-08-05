@@ -114,30 +114,19 @@ class GenBatcher:
             input_ids = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0)
             return input_ids
         
-
-class DataModule(pl.LightningDataModule):
-    def __init__(self, args):
-        super().__init__()
-        self.hparams = args
-        # self.gen_batcher = GenBatcher(args.text_truncate, args.gpt2_truncate, args.gpt2_config)
-        
-    def train_dataloader(self):
-        train_dataset = KGDataset(self.hparams.train_file, max_knowledge=999)
-        loader = DataLoader(
-            train_dataset, batch_size=self.hparams.batch_size,
-            shuffle=True, num_workers=8, collate_fn=collate_fn
-        )
-        return loader
+       
+def get_train_dataloader(args):
+    train_dataset = KGDataset(args.train_file, max_knowledge=999)
+    loader = DataLoader(
+        train_dataset, batch_size=args.batch_size,
+        shuffle=True, num_workers=8, collate_fn=collate_fn
+    )
+    return loader
     
-    def val_dataloader(self):
-        train_dataset = KGDataset(self.hparams.valid_file, max_knowledge=999)
-        loader = DataLoader(
-            train_dataset, batch_size=1,
-            shuffle=False, num_workers=8, collate_fn=collate_fn
-        )
-        return loader
-    
-    def transfer_batch_to_device(self, batch, device):
-        return batch
-    
-    
+def get_val_dataloader(args):
+    train_dataset = KGDataset(args.valid_file, max_knowledge=999)
+    loader = DataLoader(
+        train_dataset, batch_size=1,
+        shuffle=False, num_workers=8, collate_fn=collate_fn
+    )
+    return loader
